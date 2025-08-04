@@ -1,11 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, cleanupSubscriptions } from '../services/api';
 import { User, Product, Package, Target, Role } from '../types';
 import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
 import { Button } from '../components/ui/Button';
 import { PencilIcon, PlusIcon } from '@heroicons/react/24/solid';
+import { supabase } from '../lib/supabase';
 
 // --- Modal Components ---
 
@@ -158,7 +159,49 @@ export const Settings: React.FC = () => {
         setLoading(false);
       }
     };
+
+    // Setup real-time subscriptions for settings data
+    const usersSubscription = supabase
+      .channel('users-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+        const users = await api.getUsers();
+        setUsers(users);
+      })
+      .subscribe();
+
+    const productsSubscription = supabase
+      .channel('products-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+        const products = await api.getProducts();
+        setProducts(products);
+      })
+      .subscribe();
+
+    const packagesSubscription = supabase
+      .channel('packages-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'packages' }, async () => {
+        const packages = await api.getPackages();
+        setPackages(packages);
+      })
+      .subscribe();
+
+    const targetsSubscription = supabase
+      .channel('targets-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'targets' }, async () => {
+        const targets = await api.getTargets();
+        setTargets(targets);
+      })
+      .subscribe();
+
     fetchData();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      supabase.removeChannel(usersSubscription);
+      supabase.removeChannel(productsSubscription);
+      supabase.removeChannel(packagesSubscription);
+      supabase.removeChannel(targetsSubscription);
+    };
   }, []);
 
   const handleSave = async <T extends {id: string} | {user_id: string}>(

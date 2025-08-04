@@ -1,12 +1,13 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { api } from '../services/api';
+import { api, cleanupSubscriptions } from '../services/api';
 import { HandleCustomerData, Product, Package, FollowUpStatus } from '../types';
 import { Spinner } from '../components/ui/Spinner';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { PencilIcon } from '@heroicons/react/24/solid';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 
 const WhatsAppIcon = () => (
@@ -100,7 +101,31 @@ export const HandleCustomer: React.FC = () => {
         setLoading(false);
       }
     };
+
+    // Setup real-time subscription for handle customer data
+    const hcSubscription = supabase
+      .channel('handle-customer-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'handle_customer_data',
+        },
+        async () => {
+          // Refresh data when changes occur
+          const data = await api.getHandleCustomerData();
+          setHcData(data);
+        }
+      )
+      .subscribe();
+
     fetchData();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(hcSubscription);
+    };
   }, []);
   
   const handleUpdateItem = async (updatedItem: HandleCustomerData) => {

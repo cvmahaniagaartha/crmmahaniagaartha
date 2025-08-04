@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { api } from '../services/api';
+import { api, subscribeToLeads, subscribeToNotes, cleanupSubscriptions } from '../services/api';
 import { Lead, LeadStage, FinalStatus, PaymentMethod, Product, Package, Note } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Spinner } from '../components/ui/Spinner';
@@ -159,7 +159,30 @@ export const Leads: React.FC = () => {
         setLoading(false);
       }
     };
+
+    // Setup real-time subscriptions
+    const leadsSubscription = subscribeToLeads(async (updatedLeads) => {
+      if (user) {
+        // Filter leads for current user
+        const userLeads = updatedLeads.filter(lead => lead.assigned_to === user.id);
+        setLeads(userLeads);
+      }
+    });
+
+    const notesSubscription = subscribeToNotes(async () => {
+      // Refresh leads when notes change to get updated notes
+      if (user) {
+        const userLeads = await api.getLeadsByAdminId(user.id);
+        setLeads(userLeads);
+      }
+    });
+
     fetchData();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      cleanupSubscriptions();
+    };
   }, [user]);
 
   const handleUpdateLead = async (updatedLead: Lead, newNoteText: string) => {

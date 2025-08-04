@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { StatCard } from '../components/dashboard/StatCard';
 import { AnalyticsChart } from '../components/dashboard/AnalyticsChart';
 import { Spinner } from '../components/ui/Spinner';
-import { api } from '../services/api';
+import { api, subscribeToLeads, cleanupSubscriptions } from '../services/api';
 import { Lead, LeadStage, AdminPerformance, Product, User } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { CurrencyDollarIcon, ChartBarIcon, ClipboardDocumentListIcon, UserGroupIcon, ClockIcon, SparklesIcon } from '@heroicons/react/24/solid';
@@ -59,7 +59,37 @@ export const Dashboard: React.FC = () => {
         setLoading(false);
       }
     };
+
+    // Setup real-time subscription for leads
+    const leadsSubscription = subscribeToLeads((updatedLeads) => {
+      setLeads(updatedLeads);
+      // Recalculate performance when leads update
+      if (admins.length > 0) {
+        const performanceData = admins.map(admin => {
+          const adminLeads = updatedLeads.filter(l => l.assigned_to === admin.id);
+          const adminClosing = adminLeads.filter(l => l.stage === LeadStage.CLOSING);
+          return {
+            adminId: admin.id,
+            adminName: admin.nama_lengkap,
+            totalLeads: adminLeads.length,
+            totalClosing: adminClosing.length,
+            closingRate: adminLeads.length > 0 ? (adminClosing.length / adminLeads.length) * 100 : 0,
+            targetHarian: 0, // Will be updated from targets
+            pencapaianHarian: adminClosing.filter(l => new Date(l.tanggal_closing || 0).toDateString() === new Date().toDateString()).length,
+            targetBulanan: 0, // Will be updated from targets
+            pencapaianBulanan: adminClosing.length,
+          }
+        });
+        setPerformance(performanceData);
+      }
+    });
+
     fetchData();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      cleanupSubscriptions();
+    };
   }, []);
   
   const filteredLeads = useMemo(() => {

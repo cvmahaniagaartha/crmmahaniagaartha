@@ -1,6 +1,56 @@
 import { supabase, handleSupabaseError } from '../lib/supabase';
 import { Role, User, Product, Package, Lead, LeadStage, FinalStatus, FollowUpStatus, HandleCustomerData, Target, PaymentMethod, Note } from '../types';
 
+// Real-time subscription management
+let activeSubscriptions: any[] = [];
+
+export const cleanupSubscriptions = () => {
+  activeSubscriptions.forEach(subscription => {
+    supabase.removeChannel(subscription);
+  });
+  activeSubscriptions = [];
+};
+
+export const subscribeToLeads = (callback: (leads: Lead[]) => void) => {
+  const channel = supabase
+    .channel('leads-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'leads',
+      },
+      async () => {
+        // Refresh leads data when changes occur
+        const leads = await api.getLeads();
+        callback(leads);
+      }
+    )
+    .subscribe();
+
+  activeSubscriptions.push(channel);
+  return channel;
+};
+
+export const subscribeToNotes = (callback: () => void) => {
+  const channel = supabase
+    .channel('notes-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notes',
+      },
+      callback
+    )
+    .subscribe();
+
+  activeSubscriptions.push(channel);
+  return channel;
+};
+
 // Helper function to transform database rows to application types
 const transformLead = (leadRow: any, notes: Note[] = []): Lead => ({
   id: leadRow.id,
